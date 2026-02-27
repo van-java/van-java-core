@@ -1,0 +1,43 @@
+name: Dev Snapshot
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'src/**'
+      - 'build.gradle'
+      - 'settings.gradle'
+  workflow_dispatch:
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Patch version to SNAPSHOT
+        run: |
+          BASE_VERSION=$(grep "^version" build.gradle | sed "s/version = '\\(.*\\)'/\\1/")
+          SNAPSHOT_VERSION="${BASE_VERSION}-SNAPSHOT"
+          sed -i "s/version = '.*'/version = '${SNAPSHOT_VERSION}'/" build.gradle
+          echo "Publishing version: ${SNAPSHOT_VERSION}"
+
+      - name: Build
+        run: gradle build
+
+      - name: Publish snapshot to Maven Central
+        run: gradle publishAggregationToCentralSnapshots
+        env:
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
