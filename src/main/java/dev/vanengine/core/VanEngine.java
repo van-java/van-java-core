@@ -17,6 +17,35 @@ public class VanEngine {
         this.basePath = basePath;
     }
 
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder {
+        private Path basePath;
+
+        private Builder() {}
+
+        public Builder basePath(Path basePath) {
+            this.basePath = basePath;
+            return this;
+        }
+
+        public VanEngine build() {
+            try {
+                VanCompiler compiler = new VanCompiler();
+                compiler.init();
+                VanEngine engine = new VanEngine(compiler);
+                if (basePath != null) {
+                    engine.setBasePath(basePath);
+                }
+                return engine;
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to initialize VanCompiler", e);
+            }
+        }
+    }
+
     /**
      * Compile a .van file from the filesystem and return a reusable template.
      */

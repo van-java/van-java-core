@@ -46,32 +46,21 @@ dependencies {
 ### Usage
 
 ```java
-// 1. Create and start the compiler daemon
-VanCompiler compiler = new VanCompiler();
-compiler.init();
+// 1. Create the engine (compiler daemon starts automatically)
+VanEngine engine = VanEngine.builder()
+        .basePath(Path.of("/path/to/themes/default"))
+        .build();
 
-// 2. Create the engine
-VanEngine engine = new VanEngine(compiler);
-engine.setBasePath(Path.of("/path/to/themes/default"));
+// 2. Compile a file and evaluate
+String html = engine.compile("pages/index.van", Map.of("title", "Hello", "message", "World"));
 
-// 3a. Compile a file and evaluate
-VanTemplate template = engine.getTemplate("pages/index.van");
-String html = template.evaluate(Map.of("title", "Hello", "message", "World"));
-
-// 3b. Or use the one-step convenience method
-String html = engine.compile("pages/index.van",
-        Map.of("title", "Hello", "message", "World"));
-
-// 3c. Compile an inline template
+// Or compile an inline template
 String html = engine.compileLiteral("""
         <template>
           <h1>{{ title }}</h1>
         </template>
         """,
         Map.of("title", "Hello"));
-
-// 4. Shut down when done
-compiler.close();
 ```
 
 ## API
@@ -121,11 +110,11 @@ Supports dot-notation for nested values (e.g., `{{ user.name }}`). All interpola
 
 ## Requirements
 
-- Java 25+
+- Java 17+
 
 ## Related
 
-- [**Van**](https://github.com/vanengine/van) — Core template engine (Rust / WASM)
+- [**van**](https://github.com/vanengine/van) — Core template engine (Rust / WASM)
 - [**van-spring-boot-starter**](https://github.com/van-java/van-spring-boot-starter) — Spring Boot integration
 
 ## License
