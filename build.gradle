@@ -1,0 +1,76 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'signing'
+}
+
+group = 'dev.vanengine'
+version = '0.1.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+    withJavadocJar()
+    withSourcesJar()
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    api 'com.fasterxml.jackson.core:jackson-databind:2.18.3'
+    api 'org.slf4j:slf4j-api:2.0.17'
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            groupId = 'dev.vanengine'
+            artifactId = 'van-java-core'
+
+            pom {
+                name = 'Van Java Core'
+                description = 'Pure Java compilation engine for the Van template engine'
+                url = 'https://github.com/van-java/van-java-core'
+
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'van'
+                        name = 'Van Contributors'
+                    }
+                }
+                scm {
+                    connection = 'scm:git:git://github.com/van-java/van-java-core.git'
+                    developerConnection = 'scm:git:ssh://github.com/van-java/van-java-core.git'
+                    url = 'https://github.com/van-java/van-java-core'
+                }
+            }
+
+            versionMapping {
+                usage('java-api') {
+                    fromResolutionOf('runtimeClasspath')
+                }
+                usage('java-runtime') {
+                    fromResolutionResult()
+                }
+            }
+        }
+    }
+}
+
+signing {
+    def signingKey = System.getenv('GPG_PRIVATE_KEY')
+    def signingPassword = System.getenv('GPG_PASSPHRASE')
+    useInMemoryPgpKeys(signingKey, signingPassword)
+    sign publishing.publications.maven
+    required { signingKey != null }
+}
