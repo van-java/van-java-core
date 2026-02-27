@@ -30,8 +30,9 @@ public class NativeBinaryResolver {
     private static final Logger log = LoggerFactory.getLogger(NativeBinaryResolver.class);
 
     private static final String VERSION = loadVersion();
+    private static final String RELEASE_VERSION = VERSION.replaceFirst("-SNAPSHOT$", "");
     private static final String GITHUB_RELEASE_BASE =
-            "https://github.com/vanengine/van/releases/download/v" + VERSION + "/";
+            "https://github.com/vanengine/van/releases/download/v" + RELEASE_VERSION + "/";
 
     private static String loadVersion() {
         try (InputStream in = NativeBinaryResolver.class.getResourceAsStream("/van-core.properties")) {
