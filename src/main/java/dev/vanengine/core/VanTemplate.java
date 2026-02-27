@@ -4,12 +4,25 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class VanRenderer {
+/**
+ * A compiled, immutable template holding HTML with {{ expr }} placeholders.
+ * Thread-safe and reusable — separate from the expensive WASM compilation step.
+ */
+public class VanTemplate {
 
     private static final Pattern MUSTACHE = Pattern.compile("\\{\\{\\s*(.+?)\\s*}}");
 
-    public String render(String html, Map<String, ?> model) {
-        Matcher matcher = MUSTACHE.matcher(html);
+    private final String compiledHtml;
+
+    VanTemplate(String compiledHtml) {
+        this.compiledHtml = compiledHtml;
+    }
+
+    /**
+     * Interpolate {{ expr }} placeholders with model data.
+     */
+    public String evaluate(Map<String, ?> model) {
+        Matcher matcher = MUSTACHE.matcher(compiledHtml);
         StringBuilder sb = new StringBuilder();
         while (matcher.find()) {
             String expr = matcher.group(1);
@@ -17,12 +30,18 @@ public class VanRenderer {
             if (value != null) {
                 matcher.appendReplacement(sb, Matcher.quoteReplacement(escapeHtml(value.toString())));
             } else {
-                // Leave unresolved expressions as-is
                 matcher.appendReplacement(sb, Matcher.quoteReplacement(matcher.group(0)));
             }
         }
         matcher.appendTail(sb);
         return sb.toString();
+    }
+
+    /**
+     * Return the raw compiled HTML (with unresolved {{ expr }} placeholders).
+     */
+    public String getHtml() {
+        return compiledHtml;
     }
 
     private Object resolve(String expr, Map<String, ?> model) {
