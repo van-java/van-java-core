@@ -5,15 +5,11 @@ plugins {
 }
 
 group = 'dev.vanengine'
-version = '0.1.0'
-
-ext {
-    vanCompilerVersion = '0.1.16'
-}
+version = '0.1.16'
 
 processResources {
     filesMatching('van-core.properties') {
-        expand(vanCompilerVersion: vanCompilerVersion)
+        expand(vanCompilerVersion: version)
     }
 }
 

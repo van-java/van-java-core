@@ -11,8 +11,8 @@ on:
     types: [van-dev-published]
   workflow_dispatch:
     inputs:
-      van_compiler_version:
-        description: 'van-compiler version (e.g. 0.2.0-dev.42)'
+      van_version:
+        description: 'Version (e.g. 0.2.0-dev.42)'
         required: false
 
 jobs:
@@ -34,21 +34,22 @@ jobs:
 
       - name: Patch version to SNAPSHOT
         run: |
-          BASE_VERSION=$(grep "^version" build.gradle | sed "s/version = '\\(.*\\)'/\\1/")
-          SNAPSHOT_VERSION="${BASE_VERSION}-SNAPSHOT"
-          sed -i "s/version = '.*'/version = '${SNAPSHOT_VERSION}'/" build.gradle
-
-          # Patch vanCompilerVersion if provided
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            VAN_COMPILER_VERSION="${{ github.event.client_payload.van_core_version }}"
-          elif [ -n "${{ github.event.inputs.van_compiler_version }}" ]; then
-            VAN_COMPILER_VERSION="${{ github.event.inputs.van_compiler_version }}"
-          fi
-          if [ -n "$VAN_COMPILER_VERSION" ]; then
-            sed -i "s/vanCompilerVersion = '.*'/vanCompilerVersion = '${VAN_COMPILER_VERSION}'/" build.gradle
-            echo "van-compiler version: ${VAN_COMPILER_VERSION}"
+            VAN_VERSION="${{ github.event.client_payload.van_core_version }}"
+          elif [ -n "${{ github.event.inputs.van_version }}" ]; then
+            VAN_VERSION="${{ github.event.inputs.van_version }}"
           fi
 
+          if [ -n "$VAN_VERSION" ]; then
+            # Derive SNAPSHOT version: 0.2.0-dev.42 → 0.2.0-SNAPSHOT
+            SNAPSHOT_VERSION=$(echo "$VAN_VERSION" | sed 's/-dev\.[0-9]*/-SNAPSHOT/')
+            sed -i "s/version = '.*'/version = '${VAN_VERSION}'/" build.gradle
+          else
+            BASE_VERSION=$(grep "^version" build.gradle | sed "s/version = '\\(.*\\)'/\\1/")
+            SNAPSHOT_VERSION="${BASE_VERSION}-SNAPSHOT"
+          fi
+
+          sed -i "s/version = '.*'/version = '${SNAPSHOT_VERSION}'/" build.gradle
           echo "Publishing version: ${SNAPSHOT_VERSION}"
 
       - name: Build

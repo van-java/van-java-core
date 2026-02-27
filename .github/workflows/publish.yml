@@ -9,11 +9,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish (e.g. 0.1.0)'
+        description: 'Version to publish (e.g. 0.1.17)'
         required: true
-      van_compiler_version:
-        description: 'van-compiler version (e.g. 0.1.17)'
-        required: false
 
 permissions:
   contents: write
@@ -50,19 +47,8 @@ jobs:
         run: |
           VERSION=${{ steps.version.outputs.version }}
           sed -i "s/version = '.*'/version = '${VERSION}'/" build.gradle
-
-          # Patch vanCompilerVersion if provided
-          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            VAN_COMPILER_VERSION="${{ github.event.client_payload.van_core_version }}"
-          elif [ -n "${{ github.event.inputs.van_compiler_version }}" ]; then
-            VAN_COMPILER_VERSION="${{ github.event.inputs.van_compiler_version }}"
-          fi
-          if [ -n "$VAN_COMPILER_VERSION" ]; then
-            sed -i "s/vanCompilerVersion = '.*'/vanCompilerVersion = '${VAN_COMPILER_VERSION}'/" build.gradle
-          fi
-
           echo "--- build.gradle ---"
-          grep -E "version|vanCompilerVersion" build.gradle | head -3
+          grep 'version' build.gradle | head -1
 
       - name: Build
         run: gradle build
