@@ -70,7 +70,9 @@ publishing {
 signing {
     def signingKey = System.getenv('GPG_PRIVATE_KEY')
     def signingPassword = System.getenv('GPG_PASSPHRASE')
-    useInMemoryPgpKeys(signingKey, signingPassword)
+    required { signingKey }
+    if (signingKey) {
+        useInMemoryPgpKeys(signingKey, signingPassword)
+    }
     sign publishing.publications.maven
-    required { signingKey != null }
 }
