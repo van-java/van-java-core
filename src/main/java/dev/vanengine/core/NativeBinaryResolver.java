@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.util.Properties;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -28,9 +29,21 @@ public class NativeBinaryResolver {
 
     private static final Logger log = LoggerFactory.getLogger(NativeBinaryResolver.class);
 
-    private static final String VERSION = "0.1.16";
+    private static final String VERSION = loadVersion();
     private static final String GITHUB_RELEASE_BASE =
             "https://github.com/vanengine/van/releases/download/v" + VERSION + "/";
+
+    private static String loadVersion() {
+        try (InputStream in = NativeBinaryResolver.class.getResourceAsStream("/van-core.properties")) {
+            if (in != null) {
+                Properties props = new Properties();
+                props.load(in);
+                return props.getProperty("van.compiler.version", "0.1.16");
+            }
+        } catch (IOException ignored) {
+        }
+        return "0.1.16";
+    }
 
     public Path resolve() {
         // 1. Environment variable

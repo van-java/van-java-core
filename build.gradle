@@ -7,6 +7,16 @@ plugins {
 group = 'dev.vanengine'
 version = '0.1.0'
 
+ext {
+    vanCompilerVersion = '0.1.16'
+}
+
+processResources {
+    filesMatching('van-core.properties') {
+        expand(vanCompilerVersion: vanCompilerVersion)
+    }
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)
