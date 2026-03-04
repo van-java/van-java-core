@@ -26,9 +26,18 @@ public class VanCompiler implements AutoCloseable {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ConcurrentHashMap<String, CacheEntry> cache = new ConcurrentHashMap<>();
 
+    private String globalName;
     private Process process;
     private BufferedWriter processStdin;
     private BufferedReader processStdout;
+
+    public void setGlobalName(String globalName) {
+        this.globalName = globalName;
+    }
+
+    public String getGlobalName() {
+        return globalName;
+    }
 
     public void init() throws Exception {
         Path binary = new NativeBinaryResolver().resolve();
@@ -93,7 +102,10 @@ public class VanCompiler implements AutoCloseable {
         Map<String, Object> request = new HashMap<>();
         request.put("entry_path", entryPath);
         request.put("files", files);
-        request.put("mock_data_json", "{}");
+        request.put("data_json", "{}");
+        if (globalName != null) {
+            request.put("global_name", globalName);
+        }
 
         String jsonLine = objectMapper.writeValueAsString(request);
         processStdin.write(jsonLine);
