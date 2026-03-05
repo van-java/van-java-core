@@ -3,6 +3,8 @@ package dev.vanengine.core;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.DirectoryStream;
@@ -262,9 +264,19 @@ public class VanEngine {
             try {
                 VanCompiler compiler = new VanCompiler();
                 compiler.init();
-                if (globalName != null) {
-                    compiler.setGlobalName(globalName);
+
+                // Resolve effective globalName: explicit > theme.json > compiler default
+                String effectiveGlobalName = globalName;
+                if (effectiveGlobalName == null && basePath != null) {
+                    ThemeConfig themeConfig = loadThemeConfig(basePath);
+                    if (themeConfig != null && themeConfig.getGlobalName() != null) {
+                        effectiveGlobalName = themeConfig.getGlobalName();
+                    }
                 }
+                if (effectiveGlobalName != null) {
+                    compiler.setGlobalName(effectiveGlobalName);
+                }
+
                 VanEngine engine = new VanEngine(compiler);
                 engine.setDefaultLocale(defaultLocale);
                 engine.setMissingKeyStrategy(missingKeyStrategy);
@@ -275,6 +287,20 @@ public class VanEngine {
                 return engine;
             } catch (Exception e) {
                 throw new RuntimeException("Failed to initialize VanCompiler", e);
+            }
+        }
+
+        private static ThemeConfig loadThemeConfig(Path basePath) {
+            Path themeJsonPath = basePath.resolve("theme.json");
+            if (!Files.isRegularFile(themeJsonPath)) {
+                return null;
+            }
+            try (InputStream is = Files.newInputStream(themeJsonPath)) {
+                return new ObjectMapper().readValue(is, ThemeConfig.class);
+            } catch (IOException e) {
+                LoggerFactory.getLogger(VanEngine.class)
+                        .warn("Failed to load theme.json from {}: {}", themeJsonPath, e.getMessage());
+                return null;
             }
         }
     }
