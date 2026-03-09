@@ -99,28 +99,49 @@ public class NativeBinaryResolver {
     }
 
     private void download(String url, Path target) {
-        try {
-            Files.createDirectories(target.getParent());
-            HttpClient client = HttpClient.newBuilder()
-                    .followRedirects(HttpClient.Redirect.NORMAL)
-                    .build();
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .GET()
-                    .build();
-            HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
-            if (response.statusCode() != 200) {
-                throw new IOException("HTTP " + response.statusCode() + " downloading " + url);
+        int maxRetries = 3;
+        Exception lastException = null;
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                Files.createDirectories(target.getParent());
+                HttpClient client = HttpClient.newBuilder()
+                        .followRedirects(HttpClient.Redirect.NORMAL)
+                        .build();
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .GET()
+                        .build();
+                HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+                if (response.statusCode() == 404) {
+                    throw new IOException("HTTP 404 — release artifact not found. "
+                            + "Check that v" + RELEASE_VERSION + " has been published at "
+                            + GITHUB_RELEASE_BASE);
+                }
+                if (response.statusCode() != 200) {
+                    throw new IOException("HTTP " + response.statusCode());
+                }
+                try (InputStream in = response.body()) {
+                    Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+                }
+                if (!isWindows()) {
+                    target.toFile().setExecutable(true);
+                }
+                return;
+            } catch (IOException | InterruptedException e) {
+                lastException = e;
+                if (attempt < maxRetries) {
+                    log.warn("Download attempt {}/{} failed ({}), retrying...", attempt, maxRetries, e.getMessage());
+                }
             }
-            try (InputStream in = response.body()) {
-                Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
-            }
-            if (!isWindows()) {
-                target.toFile().setExecutable(true);
-            }
-        } catch (IOException | InterruptedException e) {
-            throw new IllegalStateException("Failed to download van-compiler from " + url, e);
         }
+        String manual = "You can manually download the binary and set VAN_COMPILER_PATH:\n"
+                + "  1. Download: " + url + "\n"
+                + "  2. Place it at: " + target + "\n"
+                + "  3. Or set environment variable: VAN_COMPILER_PATH=/path/to/van-compiler-wasi";
+        throw new IllegalStateException(
+                "Failed to download van-compiler after " + maxRetries + " attempts from " + url
+                        + "\nCause: " + lastException.getMessage()
+                        + "\n\n" + manual, lastException);
     }
 
     private static String detectOs() {
