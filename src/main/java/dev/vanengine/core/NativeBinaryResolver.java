@@ -78,7 +78,7 @@ public class NativeBinaryResolver {
         // 4. Download from GitHub Release
         String artifactName = artifactName();
         String url = GITHUB_RELEASE_BASE + artifactName;
-        log.info("Downloading van-compiler {} for {} from {}", VERSION, platformDescription(), url);
+        log.info("Downloading van-compiler {} for {} from {} to {}", VERSION, platformDescription(), url, cached);
         download(url, cached);
         log.info("van-compiler cached at {}", cached);
         return cached;
