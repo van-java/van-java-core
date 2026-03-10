@@ -136,18 +136,18 @@ public class NativeBinaryResolver {
             } catch (IOException | InterruptedException e) {
                 lastException = e;
                 if (attempt < maxRetries) {
-                    log.warn("Download attempt {}/{} failed ({}), retrying...", attempt, maxRetries, e.getMessage());
+                    log.warn("Download attempt {}/{} failed ({}), retrying...", attempt, maxRetries, exceptionMessage(e));
                 }
             }
         }
-        String manual = "You can manually download the binary and set VAN_COMPILER_PATH:\n"
-                + "  1. Download: " + url + "\n"
-                + "  2. Place it at: " + target + "\n"
-                + "  3. Or set environment variable: VAN_COMPILER_PATH=/path/to/van-compiler-wasi";
+        String cause = exceptionMessage(lastException);
+        String curl = "curl -fSL -o " + target + " " + url
+                + " && chmod +x " + target;
         throw new IllegalStateException(
-                "Failed to download van-compiler after " + maxRetries + " attempts from " + url
-                        + "\nCause: " + lastException.getMessage()
-                        + "\n\n" + manual, lastException);
+                "Failed to download van-compiler after " + maxRetries + " attempts (" + cause + ")\n\n"
+                        + "Run this command to download manually:\n\n"
+                        + "  " + curl + "\n\n"
+                        + "Or set VAN_COMPILER_PATH to an existing binary.");
     }
 
     private static String detectOs() {
@@ -200,5 +200,17 @@ public class NativeBinaryResolver {
             log.warn("Failed to parse proxy URL '{}', ignoring: {}", proxyUrl, e.getMessage());
             return null;
         }
+    }
+
+    private static String exceptionMessage(Exception e) {
+        // Walk the cause chain to find the most specific message
+        Throwable t = e;
+        while (t != null) {
+            if (t.getMessage() != null && !t.getMessage().isBlank()) {
+                return t.getMessage();
+            }
+            t = t.getCause();
+        }
+        return e.getClass().getSimpleName();
     }
 }
