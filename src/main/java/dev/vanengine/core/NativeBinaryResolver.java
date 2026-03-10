@@ -5,6 +5,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
+import java.net.ProxySelector;
 import java.net.URI;
 import java.util.Properties;
 import java.net.http.HttpClient;
@@ -104,9 +106,13 @@ public class NativeBinaryResolver {
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 Files.createDirectories(target.getParent());
-                HttpClient client = HttpClient.newBuilder()
-                        .followRedirects(HttpClient.Redirect.NORMAL)
-                        .build();
+                HttpClient.Builder clientBuilder = HttpClient.newBuilder()
+                        .followRedirects(HttpClient.Redirect.NORMAL);
+                ProxySelector proxySelector = detectProxy();
+                if (proxySelector != null) {
+                    clientBuilder.proxy(proxySelector);
+                }
+                HttpClient client = clientBuilder.build();
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(url))
                         .GET()
@@ -177,5 +183,22 @@ public class NativeBinaryResolver {
 
     private static String platformDescription() {
         return detectOs() + "-" + detectArch();
+    }
+
+    private static ProxySelector detectProxy() {
+        String proxyUrl = System.getenv("https_proxy");
+        if (proxyUrl == null || proxyUrl.isBlank()) proxyUrl = System.getenv("HTTPS_PROXY");
+        if (proxyUrl == null || proxyUrl.isBlank()) proxyUrl = System.getenv("http_proxy");
+        if (proxyUrl == null || proxyUrl.isBlank()) proxyUrl = System.getenv("HTTP_PROXY");
+        if (proxyUrl == null || proxyUrl.isBlank()) proxyUrl = System.getenv("all_proxy");
+        if (proxyUrl == null || proxyUrl.isBlank()) return null;
+        try {
+            URI uri = URI.create(proxyUrl);
+            log.debug("Using proxy: {}", proxyUrl);
+            return ProxySelector.of(new InetSocketAddress(uri.getHost(), uri.getPort()));
+        } catch (Exception e) {
+            log.warn("Failed to parse proxy URL '{}', ignoring: {}", proxyUrl, e.getMessage());
+            return null;
+        }
     }
 }
