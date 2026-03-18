@@ -102,7 +102,8 @@ public class VanCompiler implements AutoCloseable {
         Map<String, Object> request = new HashMap<>();
         request.put("entry_path", entryPath);
         request.put("files", files);
-        request.put("data_json", "{}");
+        // data_json = null triggers SSR mode: Rust preserves v-for/v-if/:class for Java
+        request.put("data_json", null);
         if (globalName != null) {
             request.put("global_name", globalName);
         }

@@ -17,6 +17,7 @@ public class VanTemplate {
     private static final Pattern MUSTACHE = Pattern.compile("\\{\\{\\s*(.+?)\\s*}}");
     private static final Pattern T_CALL = Pattern.compile(
             "\\$t\\(\\s*['\"](.+?)['\"]\\s*(?:,\\s*\\{(.+?)})?\\s*\\)");
+    private static final SsrProcessor SSR_PROCESSOR = new SsrProcessor();
 
     private final String compiledHtml;
     private final VanEngine engine; // nullable — for locale-aware evaluate
@@ -48,8 +49,11 @@ public class VanTemplate {
      * Supports $t() expressions for i18n translation when $i18n is present in the model.
      */
     public String evaluate(Map<String, ?> model) {
+        // Phase 0: SSR directive processing (v-for, v-if, v-show, :class, etc.)
+        String html = SSR_PROCESSOR.processAll(compiledHtml, new HashMap<>(model));
+
         // First pass: resolve {{{ expr }}} → raw (no escaping)
-        Matcher rawMatcher = TRIPLE_MUSTACHE.matcher(compiledHtml);
+        Matcher rawMatcher = TRIPLE_MUSTACHE.matcher(html);
         StringBuilder raw = new StringBuilder();
         while (rawMatcher.find()) {
             String expr = rawMatcher.group(1);
@@ -203,16 +207,7 @@ public class VanTemplate {
     }
 
     private Object resolve(String expr, Map<String, ?> model) {
-        String[] parts = expr.split("\\.");
-        Object current = model.get(parts[0]);
-        for (int i = 1; i < parts.length && current != null; i++) {
-            if (current instanceof Map<?, ?> map) {
-                current = map.get(parts[i]);
-            } else {
-                return null;
-            }
-        }
-        return current;
+        return ExpressionEvaluator.resolvePath(expr, model);
     }
 
     private String escapeHtml(String text) {
