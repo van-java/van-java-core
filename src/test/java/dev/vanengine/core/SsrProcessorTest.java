@@ -225,9 +225,8 @@ class SsrProcessorTest {
         void multipleConditionsTrue() {
             String html = "<span :class=\"{ 'a': x, 'b': y, 'c': z }\">text</span>";
             String result = processor.processAll(html, scope("x", true, "y", true, "z", false));
-            assertTrue(result.contains("a"));
-            assertTrue(result.contains("b"));
-            assertFalse(result.contains(" c"));
+            assertTrue(result.contains("class=\"a b\"") || result.contains("class=\"b a\""));
+            assertFalse(result.matches(".*\\bclass=\"[^\"]*\\bc\\b[^\"]*\".*"));
         }
 
         @Test
