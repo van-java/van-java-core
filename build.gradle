@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'dev.vanengine'
-version = '0.1.30'
+version = '0.1.31'
 
 processResources {
     filesMatching('van-core.properties') {
