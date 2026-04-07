@@ -1,4 +1,4 @@
-package dev.vanengine.core;
+package dev.vanengine.core.i18n;
 
 import java.io.IOException;
 import java.io.InputStream;

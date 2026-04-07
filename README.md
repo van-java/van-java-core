@@ -8,18 +8,16 @@
 
 Pure Java SDK for the [Van](https://github.com/vanengine/van) template engine — compile `.van` files (Vue SFC syntax) to HTML on the JVM, with zero Node.js dependency.
 
-<p>
-  <a href="README.md">English</a> · <a href="docs/i18n/zh-CN/README.md">简体中文</a>
-</p>
-
 ## Features
 
-- **Vue SFC Syntax** — `<template>`, `<script setup>`, `<style scoped>`
-- **WASM-powered** — Compilation delegated to the Rust-based van-compiler via a long-lived daemon process
-- **Compile / Render separation** — `VanCompiler` (expensive, WASM) produces `VanTemplate` (cheap, regex interpolation)
-- **mtime-based caching** — Filesystem templates are recompiled only when modified
-- **Auto-download** — The compiler binary is fetched from [GitHub Releases](https://github.com/vanengine/van/releases) on first use and cached at `~/.van/bin/`
-- **Thread-safe** — `VanTemplate` is immutable and safe to share across threads
+- **Pure Java** — No WASM, no subprocess, no native binary. One JAR.
+- **Vue SFC Syntax** — `<template>`, `<script setup>`, `<style scoped>`, component imports, slots
+- **Full SSR** — `v-for`, `v-if`/`v-else-if`/`v-else`, `v-show`, `:class`, `:style`, `v-html`, `v-text`, `{{ }}`
+- **Client Hydration** — Signal-based JS (`ref`, `computed`, `watch`, `effect`) auto-generated for interactive pages
+- **Expression Engine** — Ternary, logical, arithmetic, optional chaining (`?.`), nullish coalescing (`??`), method calls, array/object literals
+- **i18n** — JSON translation files, locale fallback chains, plural forms
+- **Thread-safe** — `VanTemplate` is immutable; evaluate concurrently from any thread
+- **AST Pipeline** — Single-pass HTML tree processing, no regex on HTML structure
 
 ## Quick Start
 
@@ -29,7 +27,7 @@ Pure Java SDK for the [Van](https://github.com/vanengine/van) template engine �
 
 ```groovy
 dependencies {
-    implementation 'dev.vanengine:van-java-core:0.1.16'
+    implementation 'dev.vanengine:van-java-core:0.1.32'
 }
 ```
 
@@ -39,83 +37,180 @@ dependencies {
 <dependency>
     <groupId>dev.vanengine</groupId>
     <artifactId>van-java-core</artifactId>
-    <version>0.1.16</version>
+    <version>0.1.32</version>
 </dependency>
 ```
 
-### Usage
+### Compile and Evaluate
 
 ```java
-// 1. Create the engine (compiler daemon starts automatically)
 VanEngine engine = VanEngine.builder()
-        .basePath(Path.of("/path/to/themes/default"))
+        .basePath(Path.of("/themes/default"))
         .build();
 
-// 2. Compile a file and evaluate
-String html = engine.compile("pages/index.van", Map.of("title", "Hello", "message", "World"));
+// Compile once, evaluate many times (thread-safe)
+VanTemplate template = engine.getTemplate("pages/index.van");
+String html = template.evaluate(Map.of("title", "Hello", "items", List.of("a", "b")));
 
-// Or compile an inline template
+// Or one-shot
+String html = engine.compile("pages/index.van", Map.of("title", "Hello"));
+
+// Inline templates
 String html = engine.compileLiteral("""
         <template>
           <h1>{{ title }}</h1>
+          <ul><li v-for="item in items">{{ item }}</li></ul>
         </template>
         """,
-        Map.of("title", "Hello"));
+        Map.of("title", "Hello", "items", List.of("a", "b", "c")));
 ```
 
-## API
+### In-Memory Files (classpath / testing)
 
-### VanEngine
+```java
+VanCompiler compiler = new VanCompiler();
+
+Map<String, String> files = Map.of(
+    "index.van", """
+        <template><layout><h1>{{ title }}</h1></layout></template>
+        <script setup>import Layout from './layout.van'</script>
+        """,
+    "layout.van", """
+        <template><html><body><slot /></body></html></template>
+        """
+);
+
+String html = compiler.renderToString("index.van", files, "{\"title\":\"Hello\"}");
+```
+
+## Template Syntax
+
+### Directives
+
+| Directive | Example |
+|---|---|
+| `v-for` | `<li v-for="item in items">`, `<li v-for="(item, i) in items">`, `<li v-for="{ name, id } in items">` |
+| `v-if` / `v-else-if` / `v-else` | `<div v-if="show">A</div><div v-else>B</div>` |
+| `v-show` | `<p v-show="visible">` (sets `display:none`) |
+| `v-html` | `<div v-html="rawContent">` (raw HTML, no escaping) |
+| `v-text` | `<span v-text="msg">` (escaped text) |
+| `:class` | `<div :class="{ active: isActive }">`, `<div :class="[a, 'static']">` |
+| `:style` | `<div :style="{ color: textColor }">` |
+| `:attr` | `<a :href="url">`, `<input :disabled="isOff">` |
+| `{{ }}` | `<p>{{ user.name }}</p>` (HTML-escaped) |
+| `{{{ }}}` | `<p>{{{ rawHtml }}}</p>` (raw, no escaping) |
+
+### Expressions
+
+```
+user.name                    // dot access
+items[0].name                // bracket access
+user?.profile?.email         // optional chaining
+value ?? 'default'           // nullish coalescing
+active ? 'yes' : 'no'       // ternary
+items.length > 0 && show    // logical + comparison
+str.toUpperCase()            // method calls
+items.includes('x')          // list methods
+[1, 2, 3]                   // array literal
+{ key: value }               // object literal
+```
+
+### Components and Slots
+
+```vue
+<!-- layout.van -->
+<template>
+  <div class="layout">
+    <header><slot name="header" /></header>
+    <main><slot /></main>
+  </div>
+</template>
+
+<!-- page.van -->
+<template>
+  <layout>
+    <template #header><h1>Title</h1></template>
+    <p>Default slot content</p>
+  </layout>
+</template>
+<script setup>
+import Layout from './layout.van'
+</script>
+```
+
+### i18n
+
+```java
+VanEngine engine = VanEngine.builder()
+        .basePath(Path.of("/app"))  // loads /app/i18n/*.json
+        .defaultLocale("en")
+        .build();
+
+// In templates: {{ $t('nav.home') }}
+// In Java: engine.getMessage("nav.home", "zh-CN")
+```
+
+## API Reference
+
+### VanEngine (Main Facade)
 
 | Method | Description |
 |---|---|
-| `getTemplate(path)` | Compile a `.van` file from the filesystem |
-| `getTemplate(path, files)` | Compile from an in-memory files map |
-| `getLiteralTemplate(content)` | Compile an inline template string |
+| `getTemplate(path)` | Compile a `.van` file → reusable `VanTemplate` |
+| `getTemplate(path, files)` | Compile from in-memory files map |
+| `getLiteralTemplate(content)` | Compile inline template string |
 | `compile(path, model)` | Compile + evaluate in one step |
-| `compileLiteral(content, model)` | Compile inline + evaluate in one step |
-| `setBasePath(path)` | Set the base directory for template resolution |
+| `compileLiteral(content, model)` | Compile inline + evaluate |
+| `getMessage(key, locale, params)` | Get i18n message with parameter substitution |
 
-### VanTemplate
-
-| Method | Description |
-|---|---|
-| `evaluate(model)` | Interpolate `{{ expr }}` placeholders with model data |
-| `getHtml()` | Return the raw compiled HTML |
-
-Supports dot-notation for nested values (e.g., `{{ user.name }}`). All interpolated values are HTML-escaped.
-
-### VanCompiler
+### VanTemplate (Immutable, Thread-Safe)
 
 | Method | Description |
 |---|---|
-| `init()` | Start the WASM daemon process |
-| `close()` | Stop the daemon process |
+| `evaluate(model)` | Fill data into template → final HTML |
+| `evaluate(model, locale)` | Evaluate with i18n locale |
+| `getHtml()` | Raw compiled HTML with `{{ }}` placeholders |
+
+### VanCompiler (Low-Level)
+
+| Method | Description |
+|---|---|
 | `compile(vanFile, basePath)` | Compile with mtime caching (filesystem) |
-| `compile(entryPath, files)` | Compile from an in-memory files map |
+| `compile(entryPath, files)` | Compile from in-memory files map |
+| `renderToString(entry, files, json)` | Compile + bind JSON data in one shot |
 
 ## Architecture
 
 ```
-.van file → [VanCompiler]     → compiled HTML with {{ expr }}
-              WASM daemon          ↓
-              mtime caching    [VanTemplate]
-                                   ↓
-                               evaluate(model) → Final HTML
+.van file
+  → VanParser        extract template/script/style blocks
+  → VanResolver      resolve imports, slots, v-for (AST-based)
+  → VanSignalGen     generate client-side signal JS
+  → VanCompiler      assemble HTML shell + styles + scripts
+  → VanTemplate      immutable, cached AST, thread-safe
+       ↓
+  evaluate(model)
+  → VanRuntime       single-pass AST walk: v-for/v-if/v-show/:class/{{ }}
+  → Final HTML
 ```
 
-- **VanCompiler** manages a long-lived `van-compiler-wasi --daemon` subprocess, communicating via JSON Lines over stdin/stdout
-- **VanTemplate** holds the compiled HTML and performs `{{ expr }}` interpolation — immutable, thread-safe, reusable
-- **VanEngine** is the main facade wiring compilation and evaluation together
+All HTML processing uses `VanAst` — a single mutable HTML AST with parse/serialize. No regex on HTML structure.
+
+## Security
+
+| Path | Escaping |
+|---|---|
+| `{{ expr }}` | HTML-escaped |
+| `:attr="expr"` | HTML-escaped |
+| `v-text="expr"` | HTML-escaped |
+| `{{{ expr }}}` | **Raw — XSS risk** |
+| `v-html="expr"` | **Raw — XSS risk** |
+
+**Never bind user input to `v-html` or `{{{ }}}` without server-side sanitization.**
 
 ## Requirements
 
 - Java 17+
-
-## Related
-
-- [**van**](https://github.com/vanengine/van) — Core template engine (Rust / WASM)
-- [**van-spring-boot-starter**](https://github.com/van-java/van-spring-boot-starter) — Spring Boot integration
 
 ## License
 

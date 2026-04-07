@@ -1,0 +1,17 @@
+{
+  "pageTitle": "Van Demo Dashboard",
+  "description": "A demonstration of the Van template engine with multiple components.",
+  "counterTitle": "Interactive Counter",
+  "userPanelTitle": "Team Members",
+  "statsTitle": "Statistics",
+  "users": [
+    { "id": 1, "name": "Alice Chen", "role": "Lead Developer", "active": true },
+    { "id": 2, "name": "Bob Smith", "role": "Designer", "active": true },
+    { "id": 3, "name": "Charlie Wang", "role": "DevOps", "active": false },
+    { "id": 4, "name": "Diana Lee", "role": "QA Engineer", "active": true }
+  ],
+  "stats": {
+    "total": 4,
+    "active": 3
+  }
+}

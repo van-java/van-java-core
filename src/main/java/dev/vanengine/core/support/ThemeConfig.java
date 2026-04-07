@@ -1,4 +1,4 @@
-package dev.vanengine.core;
+package dev.vanengine.core.support;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;

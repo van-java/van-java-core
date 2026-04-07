@@ -1,4 +1,4 @@
-package dev.vanengine.core;
+package dev.vanengine.core.i18n;
 
 /**
  * Strategy for handling missing i18n translation keys.

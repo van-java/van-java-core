@@ -1,0 +1,21 @@
+<script setup>
+defineProps({ users: Array })
+</script>
+
+<template>
+  <ul class="user-list">
+    <li v-for="user in users" :key="user.id">
+      <strong>{{ user.name }}</strong> - {{ user.role }}
+      <span v-if="user.active" class="badge active">Active</span>
+      <span v-else class="badge inactive">Inactive</span>
+    </li>
+  </ul>
+</template>
+
+<style scoped>
+.user-list { list-style: none; padding: 0; }
+.user-list li { padding: 0.5rem; border-bottom: 1px solid #eee; }
+.badge { font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; }
+.badge.active { background: #d4edda; color: #155724; }
+.badge.inactive { background: #f8d7da; color: #721c24; }
+</style>

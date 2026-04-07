@@ -1,0 +1,31 @@
+<script setup>
+import DefaultLayout from '../layouts/default.van'
+import Card from '../components/card.van'
+import Counter from '../components/counter.van'
+import UserList from '../components/user-list.van'
+import TogglePanel from '../components/toggle-panel.van'
+</script>
+
+<template>
+  <default-layout :title="pageTitle">
+    <template #nav>
+      <a href="/">Home</a> | <a href="/about">About</a>
+    </template>
+
+    <h1>{{ pageTitle }}</h1>
+    <p>{{ description }}</p>
+
+    <card :heading="counterTitle">
+      <counter />
+    </card>
+
+    <toggle-panel :title="userPanelTitle">
+      <user-list :users="users" />
+    </toggle-panel>
+
+    <card :heading="statsTitle">
+      <p>Total users: {{ stats.total }}</p>
+      <p>Active: {{ stats.active }}</p>
+    </card>
+  </default-layout>
+</template>

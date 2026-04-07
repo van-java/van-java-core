@@ -1,0 +1,26 @@
+<script setup>
+defineProps({ title: String })
+</script>
+
+<template>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>{{ title }}</title>
+  </head>
+  <body>
+    <nav class="navbar">
+      <slot name="nav">Default Nav</slot>
+    </nav>
+    <main>
+      <slot />
+    </main>
+    <footer>&copy; 2026 Van Demo</footer>
+  </body>
+  </html>
+</template>
+
+<style scoped>
+.navbar { background: #333; color: white; padding: 1rem; }
+footer { text-align: center; color: #999; margin-top: 2rem; }
+</style>

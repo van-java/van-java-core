@@ -1,4 +1,4 @@
-package dev.vanengine.core;
+package dev.vanengine.core.i18n;
 
 /**
  * Thrown when a translation key is missing and strategy is {@link MissingKeyStrategy#THROW_EXCEPTION}.

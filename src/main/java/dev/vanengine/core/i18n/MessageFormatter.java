@@ -1,4 +1,6 @@
-package dev.vanengine.core;
+package dev.vanengine.core.i18n;
+
+import dev.vanengine.core.support.VanUtil;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -48,7 +50,7 @@ public final class MessageFormatter {
         Map<String, Object> escaped = new HashMap<>();
         for (Map.Entry<String, ?> entry : params.entrySet()) {
             if (entry.getValue() != null) {
-                escaped.put(entry.getKey(), escapeHtml(entry.getValue().toString()));
+                escaped.put(entry.getKey(), VanUtil.escapeHtml(entry.getValue().toString()));
             }
         }
         return format(message, escaped);
@@ -103,11 +105,4 @@ public final class MessageFormatter {
         return resolvePlural(message, -1);
     }
 
-    static String escapeHtml(String text) {
-        return text.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-                .replace("'", "&#39;");
-    }
 }

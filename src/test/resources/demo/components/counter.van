@@ -1,0 +1,19 @@
+<script setup>
+const count = ref(0)
+const doubled = computed(() => count * 2)
+function increment() { count.value++ }
+function decrement() { count.value-- }
+</script>
+
+<template>
+  <div class="counter">
+    <span>Count: {{ count }} (x2 = {{ doubled }})</span>
+    <button @click="decrement">-</button>
+    <button @click="increment">+</button>
+  </div>
+</template>
+
+<style scoped>
+.counter { display: flex; align-items: center; gap: 0.5rem; }
+.counter button { padding: 0.25rem 0.75rem; cursor: pointer; }
+</style>

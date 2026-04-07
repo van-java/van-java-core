@@ -1,5 +1,8 @@
 package dev.vanengine.core;
 
+import dev.vanengine.core.support.ThemeConfig;
+import dev.vanengine.core.i18n.*;
+import dev.vanengine.core.support.VanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,15 +22,31 @@ public class VanEngine {
     private static final Logger log = LoggerFactory.getLogger(VanEngine.class);
 
     private final VanCompiler compiler;
+
+    /** Access the underlying compiler for framework integration (import collection, etc.). */
+    public VanCompiler compiler() { return compiler; }
     private final List<I18nFileParser> fileParsers = new CopyOnWriteArrayList<>();
     private Path basePath;
     private String defaultLocale = "en";
     private MissingKeyStrategy missingKeyStrategy = MissingKeyStrategy.RETURN_KEY;
 
-    // locale (lower-cased) → raw messages from single file
-    private final Map<String, Map<String, Object>> i18nMessages = new ConcurrentHashMap<>();
-    // locale (lower-cased) → merged messages (with fallback chain applied)
-    private final Map<String, Map<String, Object>> mergedCache = new ConcurrentHashMap<>();
+    /**
+     * Immutable i18n snapshot — raw messages + merged cache are always consistent.
+     * Replaced atomically via volatile reference on any mutation.
+     */
+    private record I18nSnapshot(Map<String, Map<String, Object>> raw,
+                                 Map<String, Map<String, Object>> mergedCache) {
+        I18nSnapshot() { this(Map.of(), new ConcurrentHashMap<>()); }
+
+        I18nSnapshot withLocale(String locale, Map<String, Object> messages) {
+            var newRaw = new HashMap<>(raw);
+            newRaw.put(locale, messages);
+            return new I18nSnapshot(Collections.unmodifiableMap(newRaw), new ConcurrentHashMap<>());
+        }
+
+        I18nSnapshot cleared() { return new I18nSnapshot(); }
+    }
+    private volatile I18nSnapshot i18n = new I18nSnapshot();
 
     public VanEngine(VanCompiler compiler) {
         this.compiler = compiler;
@@ -62,8 +81,7 @@ public class VanEngine {
      * Register translation messages for a locale.
      */
     public void addI18nMessages(String locale, Map<String, Object> messages) {
-        i18nMessages.put(locale.toLowerCase(), messages);
-        mergedCache.clear();
+        i18n = i18n.withLocale(locale.toLowerCase(), messages);
     }
 
     /**
@@ -95,11 +113,10 @@ public class VanEngine {
         }
         Map<String, Object> messages = parser.parse(inputStream);
         String normalizedLocale = locale.toLowerCase();
-        if (i18nMessages.containsKey(normalizedLocale)) {
+        if (i18n.raw.containsKey(normalizedLocale)) {
             log.warn("Locale '{}' already loaded, overwriting with .{} file", normalizedLocale, extension);
         }
-        i18nMessages.put(normalizedLocale, messages);
-        mergedCache.clear();
+        i18n = i18n.withLocale(normalizedLocale, messages);
         log.debug("Loaded i18n messages for locale '{}' from .{} stream", normalizedLocale, extension);
     }
 
@@ -118,19 +135,19 @@ public class VanEngine {
      * E.g. for zh-CN: deep-merge en + zh + zh-cn (highest priority last).
      */
     public Map<String, Object> getI18nMessages(String locale) {
+        I18nSnapshot snap = i18n;
         if (locale == null) {
-            return i18nMessages.getOrDefault(defaultLocale.toLowerCase(), Map.of());
+            return snap.raw.getOrDefault(defaultLocale.toLowerCase(), Map.of());
         }
         String normalized = locale.toLowerCase();
-        return mergedCache.computeIfAbsent(normalized, this::buildMergedMessages);
+        return snap.mergedCache.computeIfAbsent(normalized, k -> buildMergedMessages(k, snap));
     }
 
-    private Map<String, Object> buildMergedMessages(String normalized) {
+    private Map<String, Object> buildMergedMessages(String normalized, I18nSnapshot snap) {
         List<String> chain = buildFallbackChain(normalized);
         Map<String, Object> result = new HashMap<>();
-        // Iterate from lowest priority to highest, so higher priority overwrites
         for (int i = chain.size() - 1; i >= 0; i--) {
-            Map<String, Object> msgs = i18nMessages.get(chain.get(i));
+            Map<String, Object> msgs = snap.raw.get(chain.get(i));
             if (msgs != null) {
                 deepMerge(result, msgs);
             }
@@ -176,7 +193,7 @@ public class VanEngine {
      * Whether any i18n messages have been loaded.
      */
     public boolean hasI18nMessages() {
-        return !i18nMessages.isEmpty();
+        return !i18n.raw.isEmpty();
     }
 
     public Path getBasePath() {
@@ -189,6 +206,7 @@ public class VanEngine {
      */
     public void loadI18nFiles(Path i18nDir) {
         if (i18nDir == null || !Files.isDirectory(i18nDir)) return;
+        I18nSnapshot snap = i18n;
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(i18nDir)) {
             for (Path file : stream) {
                 if (Files.isDirectory(file)) continue;
@@ -200,12 +218,12 @@ public class VanEngine {
                 if (parser == null) continue;
                 String locale = fileName.substring(0, dotIndex);
                 String normalizedLocale = locale.toLowerCase();
-                if (i18nMessages.containsKey(normalizedLocale)) {
+                if (snap.raw.containsKey(normalizedLocale)) {
                     log.warn("Locale '{}' has multiple i18n files, overwriting with {}", normalizedLocale, fileName);
                 }
                 try (InputStream is = Files.newInputStream(file)) {
                     Map<String, Object> messages = parser.parse(is);
-                    i18nMessages.put(normalizedLocale, messages);
+                    snap = snap.withLocale(normalizedLocale, messages);
                     log.debug("Loaded i18n messages for locale '{}' from {}", locale, file);
                 } catch (IOException e) {
                     log.warn("Failed to load i18n file {}: {}", file, e.getMessage());
@@ -214,6 +232,7 @@ public class VanEngine {
         } catch (IOException e) {
             log.warn("Failed to scan i18n directory {}: {}", i18nDir, e.getMessage());
         }
+        i18n = snap;
     }
 
     /**
@@ -222,8 +241,7 @@ public class VanEngine {
     public void reloadI18nFiles() {
         if (basePath == null) return;
         Path i18nDir = basePath.resolve("i18n");
-        i18nMessages.clear();
-        mergedCache.clear();
+        i18n = new I18nSnapshot();
         loadI18nFiles(i18nDir);
         log.info("Reloaded i18n files from {}", i18nDir);
     }
@@ -261,33 +279,28 @@ public class VanEngine {
         }
 
         public VanEngine build() {
-            try {
-                VanCompiler compiler = new VanCompiler();
-                compiler.init();
+            VanCompiler compiler = new VanCompiler();
 
-                // Resolve effective globalName: explicit > theme.json > compiler default
-                String effectiveGlobalName = globalName;
-                if (effectiveGlobalName == null && basePath != null) {
-                    ThemeConfig themeConfig = loadThemeConfig(basePath);
-                    if (themeConfig != null && themeConfig.getGlobalName() != null) {
-                        effectiveGlobalName = themeConfig.getGlobalName();
-                    }
+            // Resolve effective globalName: explicit > theme.json > compiler default
+            String effectiveGlobalName = globalName;
+            if (effectiveGlobalName == null && basePath != null) {
+                ThemeConfig themeConfig = loadThemeConfig(basePath);
+                if (themeConfig != null && themeConfig.getGlobalName() != null) {
+                    effectiveGlobalName = themeConfig.getGlobalName();
                 }
-                if (effectiveGlobalName != null) {
-                    compiler.setGlobalName(effectiveGlobalName);
-                }
-
-                VanEngine engine = new VanEngine(compiler);
-                engine.setDefaultLocale(defaultLocale);
-                engine.setMissingKeyStrategy(missingKeyStrategy);
-                if (basePath != null) {
-                    engine.setBasePath(basePath);
-                    engine.loadI18nFiles(basePath.resolve("i18n"));
-                }
-                return engine;
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to initialize VanCompiler", e);
             }
+            if (effectiveGlobalName != null) {
+                compiler.setGlobalName(effectiveGlobalName);
+            }
+
+            VanEngine engine = new VanEngine(compiler);
+            engine.setDefaultLocale(defaultLocale);
+            engine.setMissingKeyStrategy(missingKeyStrategy);
+            if (basePath != null) {
+                engine.setBasePath(basePath);
+                engine.loadI18nFiles(basePath.resolve("i18n"));
+            }
+            return engine;
         }
 
         private static ThemeConfig loadThemeConfig(Path basePath) {
@@ -296,7 +309,7 @@ public class VanEngine {
                 return null;
             }
             try (InputStream is = Files.newInputStream(themeJsonPath)) {
-                return new ObjectMapper().readValue(is, ThemeConfig.class);
+                return VanUtil.MAPPER.readValue(is, ThemeConfig.class);
             } catch (IOException e) {
                 LoggerFactory.getLogger(VanEngine.class)
                         .warn("Failed to load theme.json from {}: {}", themeJsonPath, e.getMessage());
@@ -317,7 +330,7 @@ public class VanEngine {
     /**
      * Compile from an explicit files map (for classpath resources) and return a reusable template.
      */
-    public VanTemplate getTemplate(String entryPath, Map<String, String> files) throws IOException {
+    public VanTemplate getTemplate(String entryPath, Map<String, String> files) {
         String html = compiler.compile(entryPath, files).html();
         return new VanTemplate(html, this);
     }
@@ -325,7 +338,7 @@ public class VanEngine {
     /**
      * Compile an inline template string and return a reusable template.
      */
-    public VanTemplate getLiteralTemplate(String templateContent) throws IOException {
+    public VanTemplate getLiteralTemplate(String templateContent) {
         String html = compiler.compile("literal.van", Map.of("literal.van", templateContent)).html();
         return new VanTemplate(html, this);
     }
@@ -338,7 +351,7 @@ public class VanEngine {
      */
     public String getMessage(String key, String locale, Map<String, ?> params) {
         Map<String, Object> messages = getI18nMessages(locale);
-        Object value = resolveNestedKey(messages, key);
+        Object value = VanUtil.resolveNestedKey(messages, key);
         if (value == null) {
             return handleMissingKey(key, locale);
         }
@@ -364,19 +377,6 @@ public class VanEngine {
         return getMessage(key, locale, null);
     }
 
-    @SuppressWarnings("unchecked")
-    private Object resolveNestedKey(Map<String, Object> messages, String key) {
-        String[] parts = key.split("\\.");
-        Object current = messages;
-        for (String part : parts) {
-            if (current instanceof Map<?, ?> map) {
-                current = map.get(part);
-            } else {
-                return null;
-            }
-        }
-        return current;
-    }
 
     // ── i18n diagnostics ──
 
@@ -385,15 +385,16 @@ public class VanEngine {
      * Returns a map of locale → set of missing dot-separated keys.
      */
     public Map<String, Set<String>> findMissingKeys() {
+        I18nSnapshot snap = i18n;
         String defKey = defaultLocale.toLowerCase();
-        Map<String, Object> defaultMessages = i18nMessages.get(defKey);
+        Map<String, Object> defaultMessages = snap.raw.get(defKey);
         if (defaultMessages == null) return Map.of();
 
         Set<String> referenceKeys = new LinkedHashSet<>();
         flattenKeys(defaultMessages, "", referenceKeys);
 
         Map<String, Set<String>> result = new LinkedHashMap<>();
-        for (Map.Entry<String, Map<String, Object>> entry : i18nMessages.entrySet()) {
+        for (Map.Entry<String, Map<String, Object>> entry : snap.raw.entrySet()) {
             if (entry.getKey().equals(defKey)) continue;
             Set<String> localeKeys = new LinkedHashSet<>();
             flattenKeys(entry.getValue(), "", localeKeys);
@@ -419,7 +420,7 @@ public class VanEngine {
         }
     }
 
-    // ── convenience methods (対標 TwigRenderEngine) ──
+    // ── convenience methods ──
 
     /**
      * Compile a .van file and evaluate with model data in one step.
@@ -431,7 +432,15 @@ public class VanEngine {
     /**
      * Compile an inline template and evaluate with model data in one step.
      */
-    public String compileLiteral(String templateContent, Map<String, ?> model) throws IOException {
+    public String compileLiteral(String templateContent, Map<String, ?> model) {
         return getLiteralTemplate(templateContent).evaluate(model);
     }
+
+    /**
+     * Render with data — compiles in-memory files and binds JSON data in one shot.
+     */
+    public String renderToString(String entryPath, Map<String, String> files, String dataJson) {
+        return compiler.renderToString(entryPath, files, dataJson);
+    }
+
 }
